@@ -71,7 +71,8 @@ class Tester:
         assert c_img_id < len(self.cont_image_loader.dataset)
         color = self.opt.TEST.BRUSH_COLOR if color is None else color
         assert str(color).upper() in list(COLORS.keys())
-        output_dir = os.path.join(self.opt.TEST.OUTPUT_DIR, str(mode), "{}_{}".format(img_id, c_img_id)) if output_dir is None else output_dir
+        output_dir = os.path.join(self.opt.TEST.OUTPUT_DIR, str(mode)) if output_dir is None else output_dir
+        # output_dir = os.path.join(self.opt.TEST.OUTPUT_DIR, str(mode), "{}_{}".format(img_id, c_img_id)) if output_dir is None else output_dir
         os.makedirs(output_dir, exist_ok=True)
 
         x, _ = self.image_loader.dataset.__getitem__(img_id)
@@ -107,14 +108,21 @@ class Tester:
             masked_imgs = c_x * smooth_masks + x * (1. - smooth_masks)
 
             pred_masks, neck = self.mpn(masked_imgs)
-            masked_imgs_embraced = masked_imgs * (1. - pred_masks)
-            output = self.rin(masked_imgs_embraced, pred_masks, neck)
+            # masked_imgs_embraced = masked_imgs * (1. - pred_masks)
+            output = self.rin(masked_imgs, pred_masks, neck)
 
-            self.to_pil(self.unnormalize(x).squeeze(0).cpu()).save(os.path.join(output_dir, "img.png"))
-            self.to_pil(smooth_masks.squeeze(0).cpu()).save(os.path.join(output_dir, "mask.png"))
-            self.to_pil(self.unnormalize(masked_imgs).squeeze(0).cpu()).save(os.path.join(output_dir, "input.png"))
-            self.to_pil(output.squeeze(0).cpu()).save(os.path.join(output_dir, "output.png"))
-            self.to_pil(pred_masks.squeeze(0).cpu()).save(os.path.join(output_dir, "output_mask.png"))
+            vis_output = torch.cat([self.unnormalize(x).squeeze(0).cpu(),
+                                    smooth_masks.squeeze(0).repeat(3, 1, 1).cpu(),
+                                    self.unnormalize(masked_imgs).squeeze(0).cpu(),
+                                    pred_masks.squeeze(0).repeat(3, 1, 1).cpu(),
+                                    output.squeeze(0).cpu()], dim=-1)
+            self.to_pil(vis_output).save(os.path.join(output_dir, "output_{}_{}.png".format(img_id, c_img_id)))
+
+            # self.to_pil(self.unnormalize(x).squeeze(0).cpu()).save(os.path.join(output_dir, "img.png"))
+            # self.to_pil(smooth_masks.squeeze(0).cpu()).save(os.path.join(output_dir, "mask.png"))
+            # self.to_pil(self.unnormalize(masked_imgs).squeeze(0).cpu()).save(os.path.join(output_dir, "input.png"))
+            # self.to_pil(output.squeeze(0).cpu()).save(os.path.join(output_dir, "output.png"))
+            # self.to_pil(pred_masks.squeeze(0).cpu()).save(os.path.join(output_dir, "output_mask.png"))
 
     def put_graffiti(self):
         resizer = transforms.Resize((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE))
