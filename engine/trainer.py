@@ -39,7 +39,7 @@ class Trainer:
         self.dataset = ImageFolder(root=self.opt.DATASET.ROOT, transform=self.transform)
         self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
 
-        self.imagenet_transform = transforms.Compose([transforms.RandomCrop(self.opt.DATASET.SIZE),
+        self.imagenet_transform = transforms.Compose([transforms.RandomCrop(self.opt.DATASET.SIZE, pad_if_needed=True, padding_mode="reflect"),
                                                       transforms.RandomHorizontalFlip(),
                                                       transforms.ToTensor(),
                                                       transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
