@@ -68,10 +68,10 @@ class Trainer:
         self.optimizer_discriminator = torch.optim.Adam(list(self.discriminator.parameters()) + list(self.patch_discriminator.parameters()), lr=self.opt.MODEL.D.LR, betas=self.opt.MODEL.D.BETAS)
         self.optimizer_joint = torch.optim.Adam(list(self.mpn.parameters()) + list(self.rin.parameters()), lr=self.opt.MODEL.JOINT.LR, betas=self.opt.MODEL.JOINT.BETAS)
 
-        self.scheduler_mpn = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_mpn, milestones=self.opt.MODEL.MPN.SCHEDULER, gamma=self.opt.MODEL.MPN.DECAY_RATE)
-        self.scheduler_rin = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_rin, milestones=self.opt.MODEL.RIN.SCHEDULER, gamma=self.opt.MODEL.RIN.DECAY_RATE)
-        self.scheduler_discriminator = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_discriminator, milestones=self.opt.MODEL.D.SCHEDULER, gamma=self.opt.MODEL.D.DECAY_RATE)
-        self.scheduler_joint = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_joint, milestones=self.opt.MODEL.JOINT.SCHEDULER, gamma=self.opt.MODEL.JOINT.DECAY_RATE)
+        # self.scheduler_mpn = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_mpn, milestones=self.opt.MODEL.MPN.SCHEDULER, gamma=self.opt.MODEL.MPN.DECAY_RATE)
+        # self.scheduler_rin = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_rin, milestones=self.opt.MODEL.RIN.SCHEDULER, gamma=self.opt.MODEL.RIN.DECAY_RATE)
+        # self.scheduler_discriminator = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_discriminator, milestones=self.opt.MODEL.D.SCHEDULER, gamma=self.opt.MODEL.D.DECAY_RATE)
+        # self.scheduler_joint = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_joint, milestones=self.opt.MODEL.JOINT.SCHEDULER, gamma=self.opt.MODEL.JOINT.DECAY_RATE)
 
         self.num_step = self.opt.TRAIN.START_STEP
 
@@ -108,12 +108,12 @@ class Trainer:
             masked_imgs = cont_imgs * smooth_masks + imgs * (1. - smooth_masks)
             self.unknown_pixel_ratio = torch.sum(masks.view(batch_size, -1), dim=1).mean() / (h * w)
 
-            d_loss = self.train_D(masked_imgs, masks, y_imgs)
+            for _ in range(self.opt.MODEL.D.NUM_CRITICS):
+                d_loss = self.train_D(masked_imgs, masks, y_imgs)
             info += "D Loss: {} ".format(d_loss)
 
-            if self.num_step % self.opt.MODEL.D.NUM_CRITICS == 0:
-                m_loss, g_loss, pred_masks, output = self.train_G(masked_imgs, masks, y_imgs)
-                info += "M Loss: {} G Loss: {} ".format(m_loss, g_loss)
+            m_loss, g_loss, pred_masks, output = self.train_G(masked_imgs, masks, y_imgs)
+            info += "M Loss: {} G Loss: {} ".format(m_loss, g_loss)
 
             if self.num_step % self.opt.TRAIN.LOG_INTERVAL == 0:
                 log.info(info)
@@ -129,19 +129,19 @@ class Trainer:
                     self.wandb.Image(self.to_pil(pred_masks[idx].cpu()), caption="predicted_masks"),
                     self.wandb.Image(self.to_pil(output[idx].cpu()), caption="output")
                 ]}, commit=False)
-
+            self.wandb.log({})
             if self.num_step % self.opt.TRAIN.SAVE_INTERVAL == 0 and self.num_step != 0:
                 self.do_checkpoint(self.num_step)
 
-            e = self.num_step // len(self.image_loader.dataset)
-            self.scheduler_mpn.step(e)
-            self.scheduler_rin.step(e)
-            self.scheduler_joint.step(e)
-            self.scheduler_discriminator.step(e)
-            self.wandb.log({"mpn_lr": self.scheduler_mpn.get_last_lr()[0],
-                            "rin_lr": self.scheduler_rin.get_last_lr()[0],
-                            "joint_lr": self.scheduler_joint.get_last_lr()[0],
-                            "D_lr": self.scheduler_discriminator.get_last_lr()[0]})
+            # e = self.num_step // len(self.image_loader.dataset)
+            # self.scheduler_mpn.step(e)
+            # self.scheduler_rin.step(e)
+            # self.scheduler_joint.step(e)
+            # self.scheduler_discriminator.step(e)
+            # self.wandb.log({"mpn_lr": self.scheduler_mpn.get_last_lr()[0],
+            #                 "rin_lr": self.scheduler_rin.get_last_lr()[0],
+            #                 "joint_lr": self.scheduler_joint.get_last_lr()[0],
+            #                 "D_lr": self.scheduler_discriminator.get_last_lr()[0]})
 
     def train_D(self, x, y_masks, y):
         self.optimizer_discriminator.zero_grad()
@@ -165,9 +165,9 @@ class Trainer:
         d_loss.backward()
         self.optimizer_discriminator.step()
 
-        self.wandb.log({"real_global_validity": real_global_validity.item(),
+        self.wandb.log({"real_global_validity": -real_global_validity.item(),
                         "fake_global_validity": fake_global_validity.item(),
-                        "real_patch_validity": real_patch_validity.item(),
+                        "real_patch_validity": -real_patch_validity.item(),
                         "fake_patch_validity": fake_patch_validity.item(),
                         "gp_global": gp_global.item(),
                         "gp_fake": gp_fake.item(),
@@ -269,10 +269,10 @@ class Trainer:
             'optimizer_rin': self.optimizer_rin.state_dict(),
             'optimizer_joint': self.optimizer_joint.state_dict(),
             'optimizer_D': self.optimizer_discriminator.state_dict(),
-            'scheduler_mpn': self.scheduler_mpn.state_dict(),
-            'scheduler_rin': self.scheduler_rin.state_dict(),
-            'scheduler_joint': self.scheduler_joint.state_dict(),
-            'scheduler_D': self.scheduler_discriminator.state_dict(),
+            # 'scheduler_mpn': self.scheduler_mpn.state_dict(),
+            # 'scheduler_rin': self.scheduler_rin.state_dict(),
+            # 'scheduler_joint': self.scheduler_joint.state_dict(),
+            # 'scheduler_D': self.scheduler_discriminator.state_dict(),
         }
         torch.save(checkpoint, "./{}/{}/checkpoint-{}.pth".format(self.opt.TRAIN.SAVE_DIR, self.model_name, num_step))
 
@@ -290,10 +290,10 @@ class Trainer:
         self.optimizer_joint.load_state_dict(checkpoints["optimizer_joint"])
         self.optimizers_to_cuda()
 
-        self.scheduler_mpn.load_state_dict(checkpoints["scheduler_mpn"])
-        self.scheduler_rin.load_state_dict(checkpoints["scheduler_rin"])
-        self.scheduler_discriminator.load_state_dict(checkpoints["scheduler_D"])
-        self.scheduler_joint.load_state_dict(checkpoints["scheduler_joint"])
+        # self.scheduler_mpn.load_state_dict(checkpoints["scheduler_mpn"])
+        # self.scheduler_rin.load_state_dict(checkpoints["scheduler_rin"])
+        # self.scheduler_discriminator.load_state_dict(checkpoints["scheduler_D"])
+        # self.scheduler_joint.load_state_dict(checkpoints["scheduler_joint"])
 
     def optimizers_to_cuda(self):
         for state in self.optimizer_mpn.state.values():
