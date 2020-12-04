@@ -12,7 +12,7 @@ from losses.bce import WeightedBCELoss
 from losses.consistency import SemanticConsistencyLoss, IDMRFLoss
 from losses.adversarial import compute_gradient_penalty
 from utils.mask_utils import MaskGenerator, ConfidenceDrivenMaskLayer
-from utils.data_utils import UnNormalize, unnormalize_batch
+from utils.data_utils import linear_scaling, linear_unscaling
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -34,7 +34,7 @@ class Trainer:
         self.transform = transforms.Compose([transforms.Resize(self.opt.DATASET.SIZE),
                                              transforms.RandomHorizontalFlip(),
                                              transforms.ToTensor(),
-                                             transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
+                                             # transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
                                              ])
         self.dataset = ImageFolder(root=self.opt.DATASET.ROOT, transform=self.transform)
         self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
@@ -42,7 +42,7 @@ class Trainer:
         self.imagenet_transform = transforms.Compose([transforms.RandomCrop(self.opt.DATASET.SIZE, pad_if_needed=True, padding_mode="reflect"),
                                                       transforms.RandomHorizontalFlip(),
                                                       transforms.ToTensor(),
-                                                      transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
+                                                      # transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
                                                       ])
         if self.opt.DATASET.NAME.lower() == "ffhq":
             celeb_dataset = ImageFolder(root=self.opt.DATASET.CONT_ROOT, transform=self.transform)
@@ -55,7 +55,6 @@ class Trainer:
         self.mask_smoother = ConfidenceDrivenMaskLayer(self.opt.MASK.GAUS_K_SIZE, self.opt.MASK.SIGMA)
         # self.mask_smoother = GaussianSmoothing(1, 5, 1/40)
 
-        self.unnormalize = UnNormalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
         self.to_pil = transforms.ToPILImage()
 
         self.mpn = MPN(base_n_channels=self.opt.MODEL.MPN.NUM_CHANNELS, neck_n_channels=self.opt.MODEL.MPN.NECK_CHANNELS)
@@ -67,11 +66,6 @@ class Trainer:
         self.optimizer_rin = torch.optim.Adam(self.rin.parameters(), lr=self.opt.MODEL.RIN.LR, betas=self.opt.MODEL.RIN.BETAS)
         self.optimizer_discriminator = torch.optim.Adam(list(self.discriminator.parameters()) + list(self.patch_discriminator.parameters()), lr=self.opt.MODEL.D.LR, betas=self.opt.MODEL.D.BETAS)
         self.optimizer_joint = torch.optim.Adam(list(self.mpn.parameters()) + list(self.rin.parameters()), lr=self.opt.MODEL.JOINT.LR, betas=self.opt.MODEL.JOINT.BETAS)
-
-        # self.scheduler_mpn = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_mpn, milestones=self.opt.MODEL.MPN.SCHEDULER, gamma=self.opt.MODEL.MPN.DECAY_RATE)
-        # self.scheduler_rin = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_rin, milestones=self.opt.MODEL.RIN.SCHEDULER, gamma=self.opt.MODEL.RIN.DECAY_RATE)
-        # self.scheduler_discriminator = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_discriminator, milestones=self.opt.MODEL.D.SCHEDULER, gamma=self.opt.MODEL.D.DECAY_RATE)
-        # self.scheduler_joint = torch.optim.lr_scheduler.MultiStepLR(self.optimizer_joint, milestones=self.opt.MODEL.JOINT.SCHEDULER, gamma=self.opt.MODEL.JOINT.DECAY_RATE)
 
         self.num_step = self.opt.TRAIN.START_STEP
 
@@ -92,12 +86,12 @@ class Trainer:
             info = " [Step: {}/{} ({}%)] ".format(self.num_step, self.opt.TRAIN.NUM_TOTAL_STEP, 100 * self.num_step / self.opt.TRAIN.NUM_TOTAL_STEP)
 
             imgs, _ = next(iter(self.image_loader))
-            imgs = imgs.float().cuda()
-            y_imgs = unnormalize_batch(imgs, self.opt.DATASET.MEAN, self.opt.DATASET.STD).float().cuda()
+            y_imgs = imgs.float().cuda()
+            imgs = linear_scaling(imgs.float().cuda())
             batch_size, channels, h, w = imgs.size()
 
             cont_imgs, _ = next(iter(self.cont_image_loader))
-            cont_imgs = cont_imgs.float().cuda()
+            cont_imgs = linear_scaling(cont_imgs.float().cuda())
             if cont_imgs.size(0) != imgs.size(0):
                 cont_imgs = cont_imgs[:imgs.size(0)]
 
@@ -122,26 +116,16 @@ class Trainer:
                 idx = self.opt.WANDB.NUM_ROW
                 self.wandb.log({"examples": [
                     self.wandb.Image(self.to_pil(y_imgs[idx].cpu()), caption="original_image"),
-                    self.wandb.Image(self.to_pil(self.unnormalize(cont_imgs[idx]).cpu()), caption="contaminant_image"),
-                    self.wandb.Image(self.to_pil(self.unnormalize(masked_imgs[idx]).cpu()), caption="masked_image"),
+                    self.wandb.Image(self.to_pil(linear_unscaling(cont_imgs[idx]).cpu()), caption="contaminant_image"),
+                    self.wandb.Image(self.to_pil(linear_unscaling(masked_imgs[idx]).cpu()), caption="masked_image"),
                     self.wandb.Image(self.to_pil(masks[idx].cpu()), caption="original_masks"),
                     self.wandb.Image(self.to_pil(smooth_masks[idx].cpu()), caption="smoothed_masks"),
                     self.wandb.Image(self.to_pil(pred_masks[idx].cpu()), caption="predicted_masks"),
-                    self.wandb.Image(self.to_pil(output[idx].cpu()), caption="output")
+                    self.wandb.Image(self.to_pil(torch.clamp(output, min=0., max=1.)[idx].cpu()), caption="output")
                 ]}, commit=False)
             self.wandb.log({})
             if self.num_step % self.opt.TRAIN.SAVE_INTERVAL == 0 and self.num_step != 0:
                 self.do_checkpoint(self.num_step)
-
-            # e = self.num_step // len(self.image_loader.dataset)
-            # self.scheduler_mpn.step(e)
-            # self.scheduler_rin.step(e)
-            # self.scheduler_joint.step(e)
-            # self.scheduler_discriminator.step(e)
-            # self.wandb.log({"mpn_lr": self.scheduler_mpn.get_last_lr()[0],
-            #                 "rin_lr": self.scheduler_rin.get_last_lr()[0],
-            #                 "joint_lr": self.scheduler_joint.get_last_lr()[0],
-            #                 "D_lr": self.scheduler_discriminator.get_last_lr()[0]})
 
     def train_D(self, x, y_masks, y):
         self.optimizer_discriminator.zero_grad()

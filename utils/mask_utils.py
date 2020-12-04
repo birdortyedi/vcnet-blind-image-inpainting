@@ -204,14 +204,14 @@ def alpha_blend(input_image, segmentation_mask, alpha=0.5):
 
 
 COLORS = {
-    "RED": [0., 0., 1.],
-    "BLUE": [1., 0., 0.],
+    "BLUE": [0., 0., 1.],
+    "RED": [1., 0., 0.],
     "GREEN": [0., 1., 0.],
     "WHITE": [1., 1., 1.],
     "BLACK": [0., 0., 0.],
-    "YELLOW": [0., 1., 1.],
+    "YELLOW": [1., 1., 0.],
     "PINK": [1., 0., 1.],
-    "CYAN": [1., 1., 0.],
+    "CYAN": [0., 1., 1.],
 }
 
 if __name__ == '__main__':

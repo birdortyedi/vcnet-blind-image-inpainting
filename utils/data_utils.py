@@ -43,3 +43,11 @@ def unnormalize_batch(batch, mean_, std_, div_factor=1.0):
     batch *= Variable(std)
     batch = torch.add(batch, Variable(mean))
     return batch
+
+
+def linear_scaling(x):
+    return (x * 255.) / 127.5 - 1.
+
+
+def linear_unscaling(x):
+    return (x + 1.) * 127.5 / 255.

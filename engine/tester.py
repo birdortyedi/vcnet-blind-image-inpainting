@@ -11,7 +11,7 @@ from torchvision.datasets import ImageFolder
 from datasets.graffiti_dataset.dataset import DatasetSample as sample_graffiti
 
 from modeling.architecture import MPN, RIN, Discriminator
-from utils.data_utils import UnNormalize
+from utils.data_utils import linear_scaling, linear_unscaling
 from utils.mask_utils import MaskGenerator, ConfidenceDrivenMaskLayer, COLORS
 
 
@@ -30,7 +30,7 @@ class Tester:
         self.transform = transforms.Compose([transforms.Resize(self.opt.DATASET.SIZE),
                                              # transforms.RandomHorizontalFlip(),
                                              transforms.ToTensor(),
-                                             transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
+                                             # transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
                                              ])
         self.dataset = ImageFolder(root=self.opt.DATASET.ROOT, transform=self.transform)
         self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
@@ -39,8 +39,6 @@ class Tester:
         self.mask_generator = MaskGenerator(self.opt.MASK)
         self.mask_smoother = ConfidenceDrivenMaskLayer(15, 4)
 
-        self.unnormalize = UnNormalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
-        self.normalize = transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
         self.to_pil = transforms.ToPILImage()
         self.tensorize = transforms.ToTensor()
 
@@ -49,15 +47,17 @@ class Tester:
         self.discriminator = Discriminator(base_n_channels=self.opt.MODEL.D.NUM_CHANNELS)
 
         log.info("Checkpoints loading...")
-        self.load_checkpoints()
+        self.load_checkpoints(self.opt.TEST.WEIGHTS)
 
         self.mpn = self.mpn.cuda()
         self.rin = self.rin.cuda()
         self.discriminator = self.discriminator.cuda()
         self.mask_smoother = self.mask_smoother.cuda()
 
-    def load_checkpoints(self):
-        checkpoints = torch.load("./{}/{}/checkpoint-{}.pth".format(self.opt.TRAIN.SAVE_DIR, self.model_name, self.opt.TRAIN.START_STEP))
+    def load_checkpoints(self, fname=None):
+        if fname is None:
+            fname = "{}/{}/checkpoint-{}.pth".format(self.opt.TRAIN.SAVE_DIR, self.model_name, self.opt.TRAIN.START_STEP)
+        checkpoints = torch.load(fname)
         self.mpn.load_state_dict(checkpoints["mpn"])
         self.rin.load_state_dict(checkpoints["rin"])
         self.discriminator.load_state_dict(checkpoints["D"])
@@ -76,7 +76,7 @@ class Tester:
         os.makedirs(output_dir, exist_ok=True)
 
         x, _ = self.image_loader.dataset.__getitem__(img_id)
-        x = x.unsqueeze(0).cuda()
+        x = linear_scaling(x.unsqueeze(0).cuda())
         batch_size, channels, h, w = x.size()
         with torch.no_grad():
             masks = torch.cat([torch.from_numpy(self.mask_generator.generate(h, w)) for _ in range(batch_size)], dim=0).float().cuda()
@@ -105,17 +105,18 @@ class Tester:
                 x, smooth_masks = self.swap_faces(x, c_img_id)
                 c_x = x
 
+            c_x = linear_scaling(c_x)
             masked_imgs = c_x * smooth_masks + x * (1. - smooth_masks)
 
             pred_masks, neck = self.mpn(masked_imgs)
-            # masked_imgs_embraced = masked_imgs * (1. - pred_masks)
-            output = self.rin(masked_imgs, pred_masks, neck)
+            masked_imgs_embraced = masked_imgs * (1. - pred_masks)
+            output = self.rin(masked_imgs_embraced, pred_masks, neck)
 
-            vis_output = torch.cat([self.unnormalize(x).squeeze(0).cpu(),
+            vis_output = torch.cat([linear_unscaling(x).squeeze(0).cpu(),
                                     smooth_masks.squeeze(0).repeat(3, 1, 1).cpu(),
-                                    self.unnormalize(masked_imgs).squeeze(0).cpu(),
+                                    linear_unscaling(masked_imgs_embraced).squeeze(0).cpu(),
                                     pred_masks.squeeze(0).repeat(3, 1, 1).cpu(),
-                                    output.squeeze(0).cpu()], dim=-1)
+                                    torch.clamp(output.squeeze(0), max=1., min=0.).cpu()], dim=-1)
             self.to_pil(vis_output).save(os.path.join(output_dir, "output_{}_{}.png".format(img_id, c_img_id)))
 
             # self.to_pil(self.unnormalize(x).squeeze(0).cpu()).save(os.path.join(output_dir, "img.png"))
@@ -137,7 +138,7 @@ class Tester:
     def paste_facade(self, x, c_img_id):
         resizer = transforms.Resize((self.opt.DATASET.SIZE // 8))
         facade, _ = self.cont_image_loader.dataset.__getitem__(c_img_id)
-        facade = self.normalize(self.tensorize(resizer(self.to_pil(self.unnormalize(facade)))))
+        facade = linear_scaling(self.tensorize(resizer(self.to_pil(linear_unscaling(facade)))))
         coord_x, coord_y = np.random.randint(self.opt.DATASET.SIZE - self.opt.DATASET.SIZE // 8, size=(2,))
         x[:, :, coord_x:coord_x + facade.size(1), coord_y:coord_y + facade.size(2)] = facade
         masks = torch.zeros((1, 1, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
@@ -149,7 +150,7 @@ class Tester:
     def put_text(self, x, color):
         text = self.opt.TEST.TEXT
         mask = self.to_pil(torch.zeros_like(x).squeeze(0).cpu())
-        x = self.to_pil(self.unnormalize(x).squeeze(0).cpu())
+        x = self.to_pil(linear_unscaling(x).squeeze(0).cpu())
         d = ImageDraw.Draw(x)
         d_m = ImageDraw.Draw(mask)
         font = ImageFont.truetype(self.opt.TEST.FONT, self.opt.TEST.FONT_SIZE)
@@ -158,7 +159,7 @@ class Tester:
         c_h = (self.opt.DATASET.SIZE - font_h) // 2
         d.text((c_w, c_h), text, font=font, fill=tuple([int(a * 255) for a in COLORS["{}".format(color).upper()]]))
         d_m.text((c_w, c_h), text, font=font, fill=(255, 255, 255))
-        x = self.normalize(self.tensorize(x)).unsqueeze(0).cuda()
+        x = linear_scaling(self.tensorize(x)).unsqueeze(0).cuda()
         masks = self.tensorize(mask)[0].unsqueeze(0).unsqueeze(0).cuda()
         smooth_masks = self.mask_smoother(1 - masks) + masks
         smooth_masks = torch.clamp(smooth_masks, min=0., max=1.)
@@ -167,7 +168,7 @@ class Tester:
     def swap_faces(self, x, c_img_id):
         center_cropper = transforms.CenterCrop((self.opt.DATASET.SIZE // 2, self.opt.DATASET.SIZE // 2))
         c_x, _ = self.cont_image_loader.dataset.__getitem__(c_img_id)
-        crop = self.normalize(self.tensorize(center_cropper(self.to_pil(self.unnormalize(c_x)))))
+        crop = linear_scaling(self.tensorize(center_cropper(self.to_pil(linear_unscaling(c_x)))))
         coord_x = coord_y = (self.opt.DATASET.SIZE - self.opt.DATASET.SIZE // 2) // 2
         x[:, :, coord_x:coord_x + self.opt.DATASET.SIZE // 2, coord_y:coord_y + self.opt.DATASET.SIZE // 2] = crop
         masks = torch.zeros((1, 1, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
