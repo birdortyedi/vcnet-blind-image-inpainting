@@ -37,7 +37,7 @@ class Trainer:
                                              # transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
                                              ])
         self.dataset = ImageFolder(root=self.opt.DATASET.ROOT, transform=self.transform)
-        self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
+        self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TEST.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
 
         self.imagenet_transform = transforms.Compose([transforms.RandomCrop(self.opt.DATASET.SIZE, pad_if_needed=True, padding_mode="reflect"),
                                                       transforms.RandomHorizontalFlip(),
@@ -50,7 +50,7 @@ class Trainer:
             self.cont_dataset = torch.utils.data.ConcatDataset([celeb_dataset, imagenet_dataset])
         else:
             self.cont_dataset = ImageFolder(root=self.opt.DATASET.CONT_ROOT, transform=self.imagenet_transform)
-        self.cont_image_loader = data.DataLoader(dataset=self.cont_dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
+        self.cont_image_loader = data.DataLoader(dataset=self.cont_dataset, batch_size=self.opt.TEST.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
         self.mask_generator = MaskGenerator(self.opt.MASK)
         self.mask_smoother = ConfidenceDrivenMaskLayer(self.opt.MASK.GAUS_K_SIZE, self.opt.MASK.SIGMA)
         # self.mask_smoother = GaussianSmoothing(1, 5, 1/40)

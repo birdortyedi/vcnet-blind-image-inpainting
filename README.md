@@ -64,7 +64,23 @@ Models will be available soon!
 
 ## Qualitative Results
 
-Results will be available soon!
+Some intermediate results of VCNet on FFHQ-CelebAMaskHQ-ImageNet model 
+(from left to right: the original - the contaminant - broken - gt mask - smoothed mask - predicted mask - output):
+
+Iteration 75k:
+![][res75k1]
+![][res75k2]
+![][res75k3]
+
+Iteration 90k:
+![][res90k1]
+![][res90k2]
+![][res90k3] 
+
+Iteration 105k:
+![][res105k1]
+![][res105k2]
+![][res105k3] 
 
 <!---
 
@@ -77,3 +93,13 @@ Results will be available soon!
 ## Contacts
 
 Please feel free to open an issue or to send an e-mail to ```furkan.kinli@ozyegin.edu.tr```
+
+[res75k1]: outputs/examples_74744.png
+[res75k2]: outputs/examples_75144.png
+[res75k3]: outputs/examples_75544.png
+[res90k1]: outputs/examples_90944.png
+[res90k2]: outputs/examples_91144.png
+[res90k3]: outputs/examples_91344.png
+[res105k1]: outputs/examples_104344.png
+[res105k2]: outputs/examples_104744.png
+[res105k3]: outputs/examples_106144.png
