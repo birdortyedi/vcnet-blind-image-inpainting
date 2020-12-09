@@ -14,6 +14,9 @@ parser.add_argument("--dataset_dir", default="./datasets/ffhq/images1024x1024", 
 parser.add_argument("--cont_dataset_dir", default="./datasets/CelebAMask-HQ", help="contaminant dataset directory: './datasets/CelebAMask-HQ', "
                                                                                    " './datasets/ImageNet/'")
 parser.add_argument("--imagenet", default="./datasets/ImageNet/", help="imagenet directory: './datasets/ImageNet/'")
+
+parser.add_argument("--tune", action="store_true", help="true for starting tune for ablation studies")
+
 parser.add_argument("--test", "-t", action="store_true", help="true for testing phase")
 parser.add_argument("--ablation", "-a", action="store_true", help="true for ablation studies")
 parser.add_argument("--test_mode", default=1, help="test mode: 1: contaminant image,"
@@ -31,6 +34,7 @@ if __name__ == '__main__':
     cfg = get_cfg_defaults()
     # cfg.merge_from_file(args.base_cfg)
     cfg.MODEL.IS_TRAIN = not args.test
+    cfg.TRAIN.TUNE = args.tune
     # cfg.DATASET.NAME = args.dataset
     # cfg.DATASET.ROOT = args.dataset_dir
     # cfg.DATASET.CONT_ROOT = args.cont_dataset_dir

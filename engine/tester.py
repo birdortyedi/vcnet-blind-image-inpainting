@@ -2,6 +2,7 @@ import os
 import copy
 import json
 import torch
+import kornia
 import glog as log
 import numpy as np
 
@@ -69,8 +70,8 @@ class Tester:
         self.discriminator = self.discriminator.cuda()
         self.mask_smoother = self.mask_smoother.cuda()
 
-        self.PSNR = PSNR()
-        self.SSIM = SSIM()
+        self.PSNR = kornia.losses.psnr.PSNRLoss(max_val=1.)
+        self.SSIM = SSIM()  # kornia's SSIM is buggy.
         self.BCE = torch.nn.BCELoss()
 
     def load_checkpoints(self, fname=None):
@@ -84,7 +85,7 @@ class Tester:
     def eval(self):
         psnr_lst, ssim_lst, bce_lst = list(), list(), list()
         with torch.no_grad():
-            for batch_idx, (imgs, _) in tqdm(enumerate(self.image_loader), ncols=100, desc="Training", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Fore.RESET)):
+            for batch_idx, (imgs, _) in enumerate(self.image_loader):
                 imgs = linear_scaling(imgs.float().cuda())
                 batch_size, channels, h, w = imgs.size()
 
@@ -106,12 +107,16 @@ class Tester:
                 bce = self.BCE(linear_unscaling(imgs), output).item()
                 bce_lst.append(bce)
 
-                ssim = self.SSIM(linear_unscaling(imgs), output)
+                ssim = self.SSIM(255. * linear_unscaling(imgs), 255. * output).item()
                 ssim_lst.append(ssim)
 
-                for img, out in zip(linear_unscaling(imgs), output):
-                    psnr = self.PSNR(255. * img.squeeze(0).cpu(), 255. * out.squeeze(0).cpu()).item()
-                    psnr_lst.append(psnr)
+                psnr = self.PSNR(linear_unscaling(imgs), output).item()
+                psnr_lst.append(psnr)
+
+                log.info("{}/{}\tBCE: {}\tSSIM: {}\tPSNR: {}".format(batch_idx, len(self.image_loader),
+                    round(np.mean(bce_lst).item(), 3),
+                    round(np.mean(ssim_lst).item(), 3),
+                    round(np.mean(psnr_lst).item(), 3)))
 
         results = {"Dataset": self.opt.DATASET.NAME, "PSNR": np.mean(psnr_lst), "SSIM": np.mean(ssim_lst), "BCE": np.mean(bce_lst)}
         with open(os.path.join(self.opt.TEST.OUTPUT_DIR, "metrics.json"), "a+") as f:
