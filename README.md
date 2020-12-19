@@ -56,8 +56,7 @@ Modes:
 
 ## Pre-trained Models
 
-<!---You can download pretrained models here:--->
-Models will be available soon!
+You can download pretrained models here:
 
 - [FFHQ-CelebAMaskHQ-ImageNet](https://www.dropbox.com/s/e2f0dsoxqe693z0/VCNet_FFHQ_200000step_4bs_0.0002lr_1gpu_16run.pth?dl=0) 
 - [Places-ImageNet](https://www.dropbox.com/s/f03iblb3epayt6c/VCNet_Places_300000step_4bs_0.0002lr_1gpu_17run.pth?dl=0)
