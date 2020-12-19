@@ -40,7 +40,7 @@ if __name__ == '__main__':
     # cfg.DATASET.CONT_ROOT = args.cont_dataset_dir
     # cfg.DATASET.IMAGENET = args.imagenet
     cfg.TEST.WEIGHTS = args.weights
-    cfg.TEST.ABLATION = args.ablation
+    # cfg.TEST.ABLATION = args.ablation
     # cfg.TEST.MODE = args.test_mode
     # cfg.freeze()
     print(cfg)

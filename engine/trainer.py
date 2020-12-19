@@ -1,9 +1,8 @@
 import os
-import copy
 import torch
 import wandb
-import numpy as np
 import glog as log
+import numpy as np
 
 from torch.utils import data
 from torchvision import transforms
@@ -14,9 +13,9 @@ from losses.bce import WeightedBCELoss
 from losses.consistency import SemanticConsistencyLoss, IDMRFLoss
 from losses.adversarial import compute_gradient_penalty
 from utils.mask_utils import MaskGenerator, ConfidenceDrivenMaskLayer, COLORS
-from utils.data_utils import linear_scaling, linear_unscaling, put_graffiti, paste_facade, put_text, swap_faces
+from utils.data_utils import linear_scaling, linear_unscaling, get_random_string
 
-torch.autograd.set_detect_anomaly(True)
+# torch.autograd.set_detect_anomaly(True)
 
 
 class Trainer:
@@ -39,7 +38,7 @@ class Trainer:
                                              # transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
                                              ])
         self.dataset = ImageFolder(root=self.opt.DATASET.ROOT, transform=self.transform)
-        self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TEST.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
+        self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
 
         self.imagenet_transform = transforms.Compose([transforms.RandomCrop(self.opt.DATASET.SIZE, pad_if_needed=True, padding_mode="reflect"),
                                                       transforms.RandomHorizontalFlip(),
@@ -52,7 +51,7 @@ class Trainer:
             self.cont_dataset = torch.utils.data.ConcatDataset([celeb_dataset, imagenet_dataset])
         else:
             self.cont_dataset = ImageFolder(root=self.opt.DATASET.CONT_ROOT, transform=self.imagenet_transform)
-        self.cont_image_loader = data.DataLoader(dataset=self.cont_dataset, batch_size=self.opt.TEST.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
+        self.cont_image_loader = data.DataLoader(dataset=self.cont_dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
         self.mask_generator = MaskGenerator(self.opt.MASK)
         self.mask_smoother = ConfidenceDrivenMaskLayer(self.opt.MASK.GAUS_K_SIZE, self.opt.MASK.SIGMA)
         # self.mask_smoother = GaussianSmoothing(1, 5, 1/40)
@@ -93,16 +92,14 @@ class Trainer:
             batch_size, channels, h, w = imgs.size()
 
             masks = torch.from_numpy(self.mask_generator.generate(h, w)).repeat([batch_size, 1, 1, 1]).float().cuda()
+
+            cont_imgs, _ = next(iter(self.cont_image_loader))
+            cont_imgs = linear_scaling(cont_imgs.float().cuda())
+            if cont_imgs.size(0) != imgs.size(0):
+                cont_imgs = cont_imgs[:imgs.size(0)]
+
             smooth_masks = self.mask_smoother(1 - masks) + masks
             smooth_masks = torch.clamp(smooth_masks, min=0., max=1.)
-
-            if not self.opt.TRAIN.TUNE:
-                cont_imgs, _ = next(iter(self.cont_image_loader))
-                cont_imgs = linear_scaling(cont_imgs.float().cuda())
-                if cont_imgs.size(0) != imgs.size(0):
-                    cont_imgs = cont_imgs[:imgs.size(0)]
-            else:
-                cont_imgs, smooth_masks = self.apply_mode(imgs, smooth_masks)
 
             masked_imgs = cont_imgs * smooth_masks + imgs * (1. - smooth_masks)
             self.unknown_pixel_ratio = torch.sum(masks.view(batch_size, -1), dim=1).mean() / (h * w)
@@ -131,40 +128,6 @@ class Trainer:
             self.wandb.log({})
             if self.num_step % self.opt.TRAIN.SAVE_INTERVAL == 0 and self.num_step != 0:
                 self.do_checkpoint(self.num_step)
-
-    def apply_mode(self, imgs, smooth_masks):
-        mode = torch.randint(1, 9, (1,)).item()
-        if mode == 1:
-            cont_imgs, _ = next(iter(self.cont_image_loader))
-            cont_imgs = linear_scaling(cont_imgs.float().cuda())
-            if cont_imgs.size(0) != imgs.size(0):
-                cont_imgs = cont_imgs[:imgs.size(0)]
-        elif mode == 2:
-            cont_imgs = linear_scaling(torch.rand_like(imgs))
-        elif mode == 3:
-            brush = torch.tensor(np.random.choice(list(COLORS.values()))).unsqueeze(0).unsqueeze(-1).unsqueeze(-1).cuda()
-            cont_imgs = linear_scaling(torch.ones_like(imgs) * brush)
-        elif mode == 4:
-            cont_imgs = copy.deepcopy(imgs)
-        elif mode == 5:
-            cont_imgs, smooth_masks = put_graffiti(self.opt, self.mask_smoother)
-            cont_imgs = linear_scaling(cont_imgs.repeat([imgs.size(0), 1, 1, 1]))
-            smooth_masks = smooth_masks.repeat([imgs.size(0), 1, 1, 1])
-        elif mode == 6:
-            cont_imgs, _ = next(iter(self.cont_image_loader))
-            cont_imgs = linear_scaling(cont_imgs.float().cuda())
-            if cont_imgs.size(0) != imgs.size(0):
-                cont_imgs = cont_imgs[:imgs.size(0)]
-            cont_imgs, smooth_masks = paste_facade(self.opt, imgs, cont_imgs, self.mask_smoother)
-        elif mode == 7:
-            cont_imgs, smooth_masks = put_text(self.opt, imgs, COLORS, self.mask_smoother)
-        else:
-            cont_imgs, _ = next(iter(self.cont_image_loader))
-            cont_imgs = linear_scaling(cont_imgs.float().cuda())
-            if cont_imgs.size(0) != imgs.size(0):
-                cont_imgs = cont_imgs[:imgs.size(0)]
-            cont_imgs, smooth_masks = swap_faces(self.opt, imgs, cont_imgs, self.mask_smoother)
-        return cont_imgs, smooth_masks
 
     def train_D(self, x, y_masks, y):
         self.optimizer_discriminator.zero_grad()

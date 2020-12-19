@@ -21,6 +21,7 @@ from utils.data_utils import linear_scaling, linear_unscaling
 from utils.mask_utils import MaskGenerator, ConfidenceDrivenMaskLayer, COLORS
 from metrics.psnr import PSNR
 from metrics.ssim import SSIM
+from losses.bce import WeightedBCELoss
 
 
 class Tester:
@@ -43,7 +44,7 @@ class Tester:
                           "_{}lr_{}gpu".format(self.opt.MODEL.JOINT.LR, self.opt.SYSTEM.NUM_GPU) + \
                           "_{}run".format(self.opt.WANDB.RUN)
 
-        self.transform = transforms.Compose([transforms.Resize(self.opt.DATASET.SIZE),
+        self.transform = transforms.Compose([transforms.Resize(self.opt.DATASET.SIZE) if self.opt.DATASET.NAME.lower() == "ffhq" else transforms.RandomCrop(self.opt.DATASET.SIZE, pad_if_needed=True, padding_mode="reflect"),
                                              # transforms.RandomHorizontalFlip(),
                                              transforms.ToTensor(),
                                              # transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
@@ -72,7 +73,7 @@ class Tester:
 
         self.PSNR = kornia.losses.psnr.PSNRLoss(max_val=1.)
         self.SSIM = SSIM()  # kornia's SSIM is buggy.
-        self.BCE = torch.nn.BCELoss()
+        self.BCE = WeightedBCELoss()
 
     def load_checkpoints(self, fname=None):
         if fname is None:
@@ -104,7 +105,8 @@ class Tester:
                 output = self.rin(masked_imgs_embraced, pred_masks, neck)
                 output = torch.clamp(output, max=1., min=0.)
 
-                bce = self.BCE(linear_unscaling(imgs), output).item()
+                unknown_pixel_ratio = torch.sum(masks.view(batch_size, -1), dim=1).mean() / (h * w)
+                bce = self.BCE(torch.sigmoid(pred_masks), masks, torch.tensor([1 - unknown_pixel_ratio, unknown_pixel_ratio])).item()
                 bce_lst.append(bce)
 
                 ssim = self.SSIM(255. * linear_unscaling(imgs), 255. * output).item()
@@ -114,9 +116,9 @@ class Tester:
                 psnr_lst.append(psnr)
 
                 log.info("{}/{}\tBCE: {}\tSSIM: {}\tPSNR: {}".format(batch_idx, len(self.image_loader),
-                    round(np.mean(bce_lst).item(), 3),
-                    round(np.mean(ssim_lst).item(), 3),
-                    round(np.mean(psnr_lst).item(), 3)))
+                    round(bce, 3),
+                    round(ssim, 3),
+                    round(psnr, 3)))
 
         results = {"Dataset": self.opt.DATASET.NAME, "PSNR": np.mean(psnr_lst), "SSIM": np.mean(ssim_lst), "BCE": np.mean(bce_lst)}
         with open(os.path.join(self.opt.TEST.OUTPUT_DIR, "metrics.json"), "a+") as f:

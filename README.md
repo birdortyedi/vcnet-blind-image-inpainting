@@ -3,7 +3,9 @@
 
 This repository is the re-production implementation of [VCNet: A Robust Approach to Blind Image Inpainting](https://arxiv.org/pdf/2003.06816.pdf) by [Yi Wang](https://shepnerd.github.io/), [Ying-Cong Chen](https://yingcong.github.io/), Xin Tao and [Jiaya Jia](http://jiaya.me/) in the scope of [ML Reproducibility Challenge 2020](https://paperswithcode.com/rc2020). 
 
+<!---
 Authored by [Furkan Kınlı](https://birdortyedi.github.io/), Barış Özcan, [Furkan Kıraç](http://fkirac.net/).
+--->
 
 ## Requirements
 
@@ -57,10 +59,8 @@ Modes:
 <!---You can download pretrained models here:--->
 Models will be available soon!
 
-- [FFHQ-CelebAMaskHQ-ImageNet](https://birdortyedi.github.io) 
-- [Places-ImageNet](https://birdortyedi.github.io)
-<!---https://drive.google.com/vcnet_200k_4bs_0.0002lr_ffhq_celebamaskhq_imagenet.pth--->
-<!---https://drive.google.com/vcnet_200k_4bs_0.0002lr_places_imagenet.pth--->
+- [FFHQ-CelebAMaskHQ-ImageNet](https://www.dropbox.com/s/e2f0dsoxqe693z0/VCNet_FFHQ_200000step_4bs_0.0002lr_1gpu_16run.pth?dl=0) 
+- [Places-ImageNet](https://www.dropbox.com/s/f03iblb3epayt6c/VCNet_Places_300000step_4bs_0.0002lr_1gpu_17run.pth?dl=0)
 
 ## Qualitative Results
 
@@ -82,13 +82,29 @@ Iteration 105k:
 ![][res105k2]
 ![][res105k3] 
 
-<!---
+## Quantitative Results
 
-| Model name         | Top 1 Accuracy  | Top 5 Accuracy |
-| ------------------ |---------------- | -------------- |
-| My awesome model   |     85%         |      95%       |
+#### FFHQ
 
---->
+| Models               |       BCE       |      PSNR      |      SSIM      |
+| -------------------  |---------------- | -------------- | -------------- |
+| Contextual Attention |     1.297       |      16.56     |      0.5509    |
+| GMC                  |     0.766       |      20.06     |      0.6675    |
+| Partial Conv.        |     0.400       |      20.19     |      0.6795    |
+| Gated Conv.          |     0.660       |      17.16     |      0.5915    |
+| VCN (**original**)   |     0.400       |      20.94     |      0.6999    |
+| VCN (**ours**)       |     0.438       |      22.29     |      0.6658    |
+
+#### Places2
+
+| Models               |       BCE       |      PSNR      |      SSIM      |
+| -------------------  |---------------- | -------------- | -------------- |
+| Contextual Attention |     0.574       |      18.12     |      0.6018    |
+| GMC                  |     0.312       |      20.38     |      0.6956    |
+| Partial Conv.        |     0.273       |      19.73     |      0.6682    |
+| Gated Conv.          |     0.504       |      18.42     |      0.6423    |
+| VCN (**original**)   |     0.253       |      20.54     |      0.6988    |
+| VCN (**ours**)       |     0.439       |      20.29     |      0.6870    |
 
 ## Contacts
 

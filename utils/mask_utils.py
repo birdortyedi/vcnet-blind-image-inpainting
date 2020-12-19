@@ -9,7 +9,6 @@ from torch.nn import functional as F
 from PIL import Image, ImageDraw
 
 
-
 class MaskGenerator:
     def __init__(self, opt):
         self.min_num_vertex = opt.MIN_NUM_VERTEX
@@ -207,7 +206,7 @@ COLORS = {
     "BLUE": [0., 0., 1.],
     "RED": [1., 0., 0.],
     "GREEN": [0., 1., 0.],
-    "WHITE": [1., 1., 1.],
+    # "WHITE": [1., 1., 1.],
     "BLACK": [0., 0., 0.],
     "YELLOW": [1., 1., 0.],
     "PINK": [1., 0., 1.],
@@ -218,14 +217,18 @@ if __name__ == '__main__':
     from config import _C
 
     generator = MaskGenerator(_C.MASK)
-    mask = generator.generate(256, 256)
-    print(mask.size)
-    print(mask.sum())
-    print(compute_known_pixels_weights(mask))
+
+    # print(mask.size)
+    # print(mask.sum())
+    # print(compute_known_pixels_weights(mask))
     # im = Image.fromarray(mask.squeeze() * 255)
     # im.show()
 
-    mask = torch.from_numpy(mask)
+    mask = torch.zeros((1, 1, 256, 256))
+    for i in range(16):
+        mask += torch.from_numpy(generator.generate(256, 256))
+    mask = torch.clamp(mask, max=1., min=0.)
+
     smoother = GaussianSmoothing(1, 3, 1)
     mask = smoother(mask)
     im = Image.fromarray(mask.squeeze().numpy() * 255)
