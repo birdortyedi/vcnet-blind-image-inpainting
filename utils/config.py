@@ -78,8 +78,8 @@ _C.OPTIM.TEXTURE = 1e-3
 _C.OPTIM.ADVERSARIAL = 1e-3
 
 _C.DATASET = CN()
-_C.DATASET.NAME = "FFHQ"  # "FFHQ"  # "Places"
-_C.DATASET.ROOT = "./datasets/ffhq/images1024x1024"  # "./datasets/ffhq/images1024x1024"  # "./datasets/Places/imgs"
+_C.DATASET.NAME = "FFHQ"  # "FFHQ"  # "Places" # "raindrop"
+_C.DATASET.ROOT = "./datasets/ffhq/images1024x1024"  # "./datasets/ffhq/images1024x1024"  # "./datasets/Places/imgs" # "./datasets/raindrop/train/"
 _C.DATASET.CONT_ROOT = "./datasets/CelebAMask-HQ"  # "./datasets/CelebAMask-HQ"  # "./datasets/ImageNet/"
 _C.DATASET.IMAGENET = "./datasets/ImageNet/"
 _C.DATASET.SIZE = 256

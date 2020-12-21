@@ -50,9 +50,9 @@ class Tester:
                                              # transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
                                              ])
         self.dataset = ImageFolder(root=self.opt.DATASET.ROOT, transform=self.transform)
-        self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
+        self.image_loader = data.DataLoader(dataset=self.dataset, batch_size=self.opt.TEST.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
         self.cont_dataset = ImageFolder(root=self.opt.DATASET.CONT_ROOT, transform=self.transform)
-        self.cont_image_loader = data.DataLoader(dataset=self.cont_dataset, batch_size=self.opt.TRAIN.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
+        self.cont_image_loader = data.DataLoader(dataset=self.cont_dataset, batch_size=self.opt.TEST.BATCH_SIZE, shuffle=self.opt.TRAIN.SHUFFLE, num_workers=self.opt.SYSTEM.NUM_WORKERS)
         self.mask_generator = MaskGenerator(self.opt.MASK)
         self.mask_smoother = ConfidenceDrivenMaskLayer(self.opt.MASK.GAUS_K_SIZE, self.opt.MASK.SIGMA)
 
@@ -101,7 +101,7 @@ class Tester:
 
                 masked_imgs = cont_imgs * smooth_masks + imgs * (1. - smooth_masks)
                 pred_masks, neck = self.mpn(masked_imgs)
-                masked_imgs_embraced = masked_imgs * (1. - pred_masks) + torch.ones_like(masked_imgs) * pred_masks
+                masked_imgs_embraced = masked_imgs * (1. - pred_masks)
                 output = self.rin(masked_imgs_embraced, pred_masks, neck)
                 output = torch.clamp(output, max=1., min=0.)
 
@@ -124,7 +124,94 @@ class Tester:
         with open(os.path.join(self.opt.TEST.OUTPUT_DIR, "metrics.json"), "a+") as f:
             json.dump(results, f)
 
-    def infer(self, mode=None, img_id=None, c_img_id=None, color=None, output_dir=None):
+    def infer(self, img_path, cont_path=None, mode=None, color=None, text=None, mask_path=None, output_dir=None):
+        mode = self.opt.TEST.MODE if mode is None else mode
+        text = self.opt.TEST.TEXT if text is None else text
+
+        with torch.no_grad():
+            im = Image.open(img_path).convert("RGB")
+            im = im.resize((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE))
+            im_t = linear_scaling(transforms.ToTensor()(im).unsqueeze(0).cuda())
+
+            if cont_path is not None:
+                assert mode in [1, 5, 6, 7, 8]
+                c_im = Image.open(cont_path).convert("RGB")
+                c_im = c_im.resize((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE))
+                if mode == 6:
+                    c_im = c_im.resize((self.opt.DATASET.SIZE // 8, self.opt.DATASET.SIZE // 8))
+                    c_im_t = self.tensorize(c_im).unsqueeze(0).cuda()
+                    r_c_im_t = torch.zeros((1, 3, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
+                    masks = torch.zeros((1, 1, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
+                    for i in range(1):
+                        coord_x, coord_y = np.random.randint(self.opt.DATASET.SIZE - self.opt.DATASET.SIZE // 8, size=(2,))
+                        r_c_im_t[:, :, coord_x:coord_x + c_im_t.size(2), coord_y:coord_y + c_im_t.size(3)] = c_im_t
+                        masks[:, :, coord_x:coord_x + c_im_t.size(2), coord_y:coord_y + c_im_t.size(3)] = torch.ones_like(c_im_t[0, 0])
+                    c_im_t = linear_scaling(r_c_im_t)
+                elif mode == 7:
+                    mask = self.to_pil(torch.zeros((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)))
+                    d = ImageDraw.Draw(c_im)
+                    d_m = ImageDraw.Draw(mask)
+                    font = ImageFont.truetype(self.opt.TEST.FONT, self.opt.TEST.FONT_SIZE)
+                    font_w, font_h = d.textsize(text, font=font)
+                    c_w = (self.opt.DATASET.SIZE - font_w) // 2
+                    c_h = (self.opt.DATASET.SIZE - font_h) // 2
+                    d.text((c_w, c_h), text, font=font, fill=tuple([int(a * 255) for a in COLORS["{}".format(color).upper()]]))
+                    d_m.text((c_w, c_h), text, font=font, fill=255)
+                    masks = self.tensorize(mask).unsqueeze(0).float().cuda()
+                    c_im_t = linear_scaling(self.tensorize(c_im).cuda())
+                elif mode == 8:
+                    center_cropper = transforms.CenterCrop((100, 100))
+                    crop = self.tensorize(center_cropper(c_im))
+                    coord_x = coord_y = (self.opt.DATASET.SIZE - 100) // 2
+                    r_c_im_t = torch.zeros((1, 3, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
+                    masks = torch.zeros((1, 1, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
+                    r_c_im_t[:, :, coord_x:coord_x + 100, coord_y:coord_y + 100] = crop
+                    masks[:, :, coord_x:coord_x + 100, coord_y:coord_y + 100] = torch.ones_like(crop[0])
+                    c_im_t = linear_scaling(r_c_im_t)
+                else:
+                    c_im_t = linear_scaling(transforms.ToTensor()(c_im).unsqueeze(0).cuda())
+            else:
+                assert mode in [2, 3, 4]
+                if mode == 2:
+                    c_im_t = linear_scaling(torch.rand_like(im_t))
+                elif mode == 3:
+                    color = self.opt.TEST.BRUSH_COLOR if color is None else color
+                    brush = torch.tensor(list(COLORS["{}".format(color).upper()])).unsqueeze(0).unsqueeze(-1).unsqueeze(-1).cuda()
+                    c_im_t = linear_scaling(torch.ones_like(im_t) * brush)
+                elif mode == 4:
+                    c_im_t = im_t
+
+            if mode not in [6, 7, 8]:
+                if mask_path is None:
+                    masks = torch.from_numpy(self.mask_generator.generate(self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).float().cuda()
+                else:
+                    masks = Image.open(mask_path).convert("L")
+                    masks = masks.resize((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE))
+                    masks = self.tensorize(masks).unsqueeze(0).float().cuda()
+
+            if mask_path is None or mode == 5:
+                smooth_masks = self.mask_smoother(1 - masks) + masks
+                smooth_masks = torch.clamp(smooth_masks, min=0., max=1.)
+            else:
+                smooth_masks = masks
+
+            masked_imgs = c_im_t * smooth_masks + im_t * (1. - smooth_masks)
+            pred_masks, neck = self.mpn(masked_imgs)
+            masked_imgs_embraced = masked_imgs * (1. - pred_masks)
+            output = self.rin(masked_imgs_embraced, pred_masks, neck)
+            output = torch.clamp(output, max=1., min=0.)
+
+            if output_dir is not None:
+                output_dir = os.path.join(output_dir, self.ablation_map[mode])
+                os.makedirs(output_dir, exist_ok=True)
+                self.to_pil(output.squeeze().cpu()).save(os.path.join(output_dir, "out_"+img_path.split("/")[-1]))
+            else:
+                self.to_pil(output.squeeze().cpu()).show()
+                self.to_pil(pred_masks.squeeze().cpu()).show()
+                self.to_pil(linear_unscaling(masked_imgs).squeeze().cpu()).show()
+                self.to_pil(smooth_masks.squeeze().cpu()).show()
+
+    def do_ablation(self, mode=None, img_id=None, c_img_id=None, color=None, output_dir=None):
         mode = self.opt.TEST.MODE if mode is None else mode
         assert mode in range(1, 9)
         img_id = self.opt.TEST.IMG_ID if img_id is None else img_id

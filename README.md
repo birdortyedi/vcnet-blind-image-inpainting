@@ -50,9 +50,9 @@ Modes:
 *   3: Random brush strokes with colors
 *   4: Real occlusions
 *   5: Graffiti
-*   6: Facades
-*   7: Words
-*   8: Face swapping
+*   6: Facades (*problematic*)
+*   7: Words (*problematic*)
+*   8: Face swapping (*problematic*)
 
 ## Pre-trained Models
 
@@ -63,23 +63,30 @@ You can download pretrained models here:
 
 ## Qualitative Results
 
-Some intermediate results of VCNet on FFHQ-CelebAMaskHQ-ImageNet model 
+From FFHQ-CelebAMaskHQ model 
 (from left to right: the original - the contaminant - broken - gt mask - smoothed mask - predicted mask - output):
 
-Iteration 75k:
-![][res75k1]
-![][res75k2]
-![][res75k3]
+![][ffhq-celeba-1]
+![][ffhq-celeba-2]
+![][ffhq-celeba-3]
+![][ffhq-celeba-4]
 
-Iteration 90k:
-![][res90k1]
-![][res90k2]
-![][res90k3] 
+From FFHQ-ImageNet model 
+(from left to right: the original - the contaminant - broken - gt mask - smoothed mask - predicted mask - output):
 
-Iteration 105k:
-![][res105k1]
-![][res105k2]
-![][res105k3] 
+![][ffhq-in-1]
+![][ffhq-in-2]
+![][ffhq-in-3]
+![][ffhq-in-4]
+
+From Places-ImageNet model 
+(from left to right: the original - the contaminant - broken - gt mask - smoothed mask - predicted mask - output):
+
+![][places-1]
+![][places-2]
+![][places-3]
+![][places-4]
+
 
 ## Quantitative Results
 
@@ -92,7 +99,7 @@ Iteration 105k:
 | Partial Conv.        |     0.400       |      20.19     |      0.6795    |
 | Gated Conv.          |     0.660       |      17.16     |      0.5915    |
 | VCN (**original**)   |     0.400       |      20.94     |      0.6999    |
-| VCN (**ours**)       |     0.438       |      22.29     |      0.6658    |
+| VCN (**ours**)       |     0.439       |      24.76     |      0.7026    |
 
 #### Places2
 
@@ -103,18 +110,21 @@ Iteration 105k:
 | Partial Conv.        |     0.273       |      19.73     |      0.6682    |
 | Gated Conv.          |     0.504       |      18.42     |      0.6423    |
 | VCN (**original**)   |     0.253       |      20.54     |      0.6988    |
-| VCN (**ours**)       |     0.439       |      20.29     |      0.6870    |
+| VCN (**ours**)       |     0.437       |      21.53     |      0.7070    |
 
 ## Contacts
 
 Please feel free to open an issue or to send an e-mail to ```furkan.kinli@ozyegin.edu.tr```
 
-[res75k1]: outputs/examples_74744.png
-[res75k2]: outputs/examples_75144.png
-[res75k3]: outputs/examples_75544.png
-[res90k1]: outputs/examples_90944.png
-[res90k2]: outputs/examples_91144.png
-[res90k3]: outputs/examples_91344.png
-[res105k1]: outputs/examples_104344.png
-[res105k2]: outputs/examples_104744.png
-[res105k3]: outputs/examples_106144.png
+[ffhq-celeba-1]: outputs/ffhq-celeba/examples_175544.png
+[ffhq-celeba-2]: outputs/ffhq-celeba/examples_176544.png
+[ffhq-celeba-3]: outputs/ffhq-celeba/examples_178744.png
+[ffhq-celeba-4]: outputs/ffhq-celeba/examples_178944.png
+[ffhq-in-1]: outputs/ffhq-imagenet/examples_153144.png
+[ffhq-in-2]: outputs/ffhq-imagenet/examples_173544.png
+[ffhq-in-3]: outputs/ffhq-imagenet/examples_177944.png
+[ffhq-in-4]: outputs/ffhq-imagenet/examples_181344.png
+[places-1]: outputs/places/examples_85199.png
+[places-2]: outputs/places/examples_85599.png
+[places-3]: outputs/places/examples_87999.png
+[places-4]: outputs/places/examples_91399.png

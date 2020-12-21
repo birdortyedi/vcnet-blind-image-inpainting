@@ -51,11 +51,33 @@ if __name__ == '__main__':
     else:
         tester = Tester(cfg)
         if cfg.TEST.ABLATION:
-            # tester.infer(mode=cfg.TEST.MODE, img_id=cfg.TEST.IMG_ID, c_img_id=cfg.TEST.C_IMG_ID)
             for i_id in list(range(250, 500)):
                 for c_i_id in list(range(185, 375)):
                     for mode in list(range(1, 9)):
-                        tester.infer(mode=mode, img_id=i_id, c_img_id=c_i_id)
+                        tester.do_ablation(mode=mode, img_id=i_id, c_img_id=c_i_id)
                         log.info("I: {}, C: {}, Mode:{}".format(i_id, c_i_id, mode))
         else:
+            # qualitative
+            img_path = "datasets/ffhq/images1024x1024/01000/01068.png"
+            cont_path = "datasets/CelebAMask-HQ/CelebA-HQ-img/142.jpg"
+            in_cont_path = "datasets/ImageNet/ILSVRC2012_img_val/ILSVRC2012_val_00000001.JPEG"
+            mask_path = "../../Downloads/mask.jpg"
+            graf_path = "../../Downloads/graf2.png"
+            graf_mask_path = "../../Downloads/graf-mask-2.jpeg"
+            # tester.infer(img_path, cont_path, mode=1)
+            # tester.infer(img_path, in_cont_path, mask_path=mask_path, mode=1)
+            # tester.infer(img_path, mask_path=mask_path, mode=2)
+            # tester.infer(img_path, mode=3, mask_path=mask_path, color="RED")
+            # tester.infer(img_path, mode=3, mask_path=mask_path, color="BLUE")
+            # tester.infer(img_path, mode=3, mask_path=mask_path, color="GREEN")
+            # tester.infer(img_path, mode=3, mask_path=mask_path, color="WHITE")
+            # tester.infer(img_path, mode=3, mask_path=mask_path, color="BLACK")
+
+            # tester.infer(img_path, mode=4) # ???
+            # tester.infer(img_path, graf_path, mask_path=graf_mask_path, mode=5)
+            # tester.infer(img_path, cont_path, mode=6)  # problematic
+            # tester.infer(img_path, cont_path, mode=7, text="furkan", color="BLUE")  # problematic
+            # tester.infer(img_path, cont_path, mode=8)  # problematic
+
+            # quantitative
             tester.eval()
