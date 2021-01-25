@@ -46,6 +46,7 @@ class Tester:
 
         self.transform = transforms.Compose([transforms.Resize(self.opt.DATASET.SIZE) if self.opt.DATASET.NAME.lower() == "ffhq" else transforms.RandomCrop(self.opt.DATASET.SIZE, pad_if_needed=True, padding_mode="reflect"),
                                              # transforms.RandomHorizontalFlip(),
+                                             transforms.CenterCrop(self.opt.DATASET.SIZE),
                                              transforms.ToTensor(),
                                              # transforms.Normalize(self.opt.DATASET.MEAN, self.opt.DATASET.STD)
                                              ])
@@ -124,7 +125,7 @@ class Tester:
         with open(os.path.join(self.opt.TEST.OUTPUT_DIR, "metrics.json"), "a+") as f:
             json.dump(results, f)
 
-    def infer(self, img_path, cont_path=None, mode=None, color=None, text=None, mask_path=None, output_dir=None):
+    def infer(self, img_path, cont_path=None, mode=None, color=None, text=None, mask_path=None, gt_path=None, output_dir=None):
         mode = self.opt.TEST.MODE if mode is None else mode
         text = self.opt.TEST.TEXT if text is None else text
 
@@ -132,6 +133,17 @@ class Tester:
             im = Image.open(img_path).convert("RGB")
             im = im.resize((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE))
             im_t = linear_scaling(transforms.ToTensor()(im).unsqueeze(0).cuda())
+
+            if gt_path is not None:
+                gt = Image.open(gt_path).convert("RGB")
+                gt = gt.resize((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE))
+
+            if mask_path is None:
+                masks = torch.from_numpy(self.mask_generator.generate(self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).float().cuda()
+            else:
+                masks = Image.open(mask_path).convert("L")
+                masks = masks.resize((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE))
+                masks = self.tensorize(masks).unsqueeze(0).float().cuda()
 
             if cont_path is not None:
                 assert mode in [1, 5, 6, 7, 8]
@@ -160,13 +172,20 @@ class Tester:
                     masks = self.tensorize(mask).unsqueeze(0).float().cuda()
                     c_im_t = linear_scaling(self.tensorize(c_im).cuda())
                 elif mode == 8:
-                    center_cropper = transforms.CenterCrop((100, 100))
+                    center_cropper = transforms.CenterCrop((self.opt.DATASET.SIZE // 2, self.opt.DATASET.SIZE // 2))
                     crop = self.tensorize(center_cropper(c_im))
-                    coord_x = coord_y = (self.opt.DATASET.SIZE - 100) // 2
+                    coord_x = coord_y = (self.opt.DATASET.SIZE - 128) // 2
                     r_c_im_t = torch.zeros((1, 3, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
-                    masks = torch.zeros((1, 1, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
-                    r_c_im_t[:, :, coord_x:coord_x + 100, coord_y:coord_y + 100] = crop
-                    masks[:, :, coord_x:coord_x + 100, coord_y:coord_y + 100] = torch.ones_like(crop[0])
+                    r_c_im_t[:, :, coord_x:coord_x + 128, coord_y:coord_y + 128] = crop
+                    if mask_path is None:
+                        tmp = kornia.resize(masks, self.opt.DATASET.SIZE // 2)
+                        masks = torch.zeros((1, 1, self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).cuda()
+                        masks[:, :, coord_x:coord_x + self.opt.DATASET.SIZE // 2, coord_y:coord_y + self.opt.DATASET.SIZE // 2] = tmp
+                        tmp = kornia.hflip(tmp)
+                        masks[:, :, coord_x:coord_x + self.opt.DATASET.SIZE // 2, coord_y:coord_y + self.opt.DATASET.SIZE // 2] += tmp
+                        # tmp = kornia.vflip(tmp)
+                        # masks[:, :, coord_x:coord_x + self.opt.DATASET.SIZE // 2, coord_y:coord_y + self.opt.DATASET.SIZE // 2] += tmp
+                        masks = torch.clamp(masks, min=0., max=1.)
                     c_im_t = linear_scaling(r_c_im_t)
                 else:
                     c_im_t = linear_scaling(transforms.ToTensor()(c_im).unsqueeze(0).cuda())
@@ -181,15 +200,7 @@ class Tester:
                 elif mode == 4:
                     c_im_t = im_t
 
-            if mode not in [6, 7, 8]:
-                if mask_path is None:
-                    masks = torch.from_numpy(self.mask_generator.generate(self.opt.DATASET.SIZE, self.opt.DATASET.SIZE)).float().cuda()
-                else:
-                    masks = Image.open(mask_path).convert("L")
-                    masks = masks.resize((self.opt.DATASET.SIZE, self.opt.DATASET.SIZE))
-                    masks = self.tensorize(masks).unsqueeze(0).float().cuda()
-
-            if mask_path is None or mode == 5:
+            if (mask_path is None or mode == 5) and mode != 8:
                 smooth_masks = self.mask_smoother(1 - masks) + masks
                 smooth_masks = torch.clamp(smooth_masks, min=0., max=1.)
             else:
@@ -197,19 +208,30 @@ class Tester:
 
             masked_imgs = c_im_t * smooth_masks + im_t * (1. - smooth_masks)
             pred_masks, neck = self.mpn(masked_imgs)
+            pred_masks = pred_masks if mode != 8 else torch.clamp(pred_masks * smooth_masks, min=0., max=1.)
             masked_imgs_embraced = masked_imgs * (1. - pred_masks)
             output = self.rin(masked_imgs_embraced, pred_masks, neck)
             output = torch.clamp(output, max=1., min=0.)
 
             if output_dir is not None:
-                output_dir = os.path.join(output_dir, self.ablation_map[mode])
-                os.makedirs(output_dir, exist_ok=True)
-                self.to_pil(output.squeeze().cpu()).save(os.path.join(output_dir, "out_"+img_path.split("/")[-1]))
+                # output_dir = os.path.join(output_dir, self.ablation_map[mode])
+                # os.makedirs(output_dir, exist_ok=True)
+                if mode == 8:
+                    self.to_pil(torch.cat([linear_unscaling(im_t).squeeze().cpu(),
+                                           self.tensorize(c_im).squeeze().cpu(),
+                                           linear_unscaling(masked_imgs).squeeze().cpu(),
+                                           output.squeeze().cpu()], dim=2)).save(os.path.join(output_dir, "out{}_{}_{}".format(mode, color, img_path.split("/")[-1])))
+                else:
+                    self.to_pil(torch.cat([linear_unscaling(masked_imgs).squeeze().cpu(),
+                                           output.squeeze().cpu()], dim=1)).save(os.path.join(output_dir, "out{}_{}_{}".format(mode, color, img_path.split("/")[-1])))
             else:
                 self.to_pil(output.squeeze().cpu()).show()
                 self.to_pil(pred_masks.squeeze().cpu()).show()
                 self.to_pil(linear_unscaling(masked_imgs).squeeze().cpu()).show()
                 self.to_pil(smooth_masks.squeeze().cpu()).show()
+                self.to_pil(linear_unscaling(im_t).squeeze().cpu()).show()
+                if gt_path is not None:
+                    gt.show()
 
     def do_ablation(self, mode=None, img_id=None, c_img_id=None, color=None, output_dir=None):
         mode = self.opt.TEST.MODE if mode is None else mode

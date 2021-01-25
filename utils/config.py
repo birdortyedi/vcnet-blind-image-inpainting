@@ -16,7 +16,7 @@ _C.WANDB.LOG_DIR = ""
 _C.WANDB.NUM_ROW = 0
 
 _C.TRAIN = CN()
-_C.TRAIN.NUM_TOTAL_STEP = 200000
+_C.TRAIN.NUM_TOTAL_STEP = 302000
 _C.TRAIN.START_STEP = 0
 _C.TRAIN.BATCH_SIZE = 4
 _C.TRAIN.SHUFFLE = True
@@ -31,6 +31,12 @@ _C.TRAIN.TUNE = False
 _C.MODEL = CN()
 _C.MODEL.NAME = "VCNet"
 _C.MODEL.IS_TRAIN = False
+
+_C.MODEL.RAINDROP_TUNE = True
+_C.MODEL.RAINDROP_WEIGHTS = ""
+_C.MODEL.RAINDROP_VISUALIZE_INTERVAL = 20
+_C.MODEL.RAINDROP_LOG_INTERVAL = 20
+_C.MODEL.RAINDROP_SAVE_INTERVAL = 200
 
 _C.MODEL.MPN = CN()
 _C.MODEL.MPN.NAME = "MaskPredictionNetwork"
@@ -78,17 +84,18 @@ _C.OPTIM.TEXTURE = 1e-3
 _C.OPTIM.ADVERSARIAL = 1e-3
 
 _C.DATASET = CN()
-_C.DATASET.NAME = "FFHQ"  # "FFHQ"  # "Places" # "raindrop"
-_C.DATASET.ROOT = "./datasets/ffhq/images1024x1024"  # "./datasets/ffhq/images1024x1024"  # "./datasets/Places/imgs" # "./datasets/raindrop/train/"
+_C.DATASET.NAME = "Raindrop"  # "FFHQ"  # "Places" # "raindrop"
+_C.DATASET.ROOT = "./datasets/ffhq/images1024x1024"  # "./datasets/ffhq/images1024x1024"  # "./datasets/Places/imgs" # "./datasets/raindrop/train20/"
 _C.DATASET.CONT_ROOT = "./datasets/CelebAMask-HQ"  # "./datasets/CelebAMask-HQ"  # "./datasets/ImageNet/"
 _C.DATASET.IMAGENET = "./datasets/ImageNet/"
+_C.DATASET.RAINDROP_ROOT = "./datasets/raindrop/train20/train"
 _C.DATASET.SIZE = 256
 _C.DATASET.MEAN = [0.5, 0.5, 0.5]
 _C.DATASET.STD = [0.5, 0.5, 0.5]
 
 _C.MASK = CN()
-_C.MASK.MIN_NUM_VERTEX = 0
-_C.MASK.MAX_NUM_VERTEX = 16
+_C.MASK.MIN_NUM_VERTEX = 8
+_C.MASK.MAX_NUM_VERTEX = 24
 _C.MASK.MEAN_ANGLE = 2 * math.pi / 5
 _C.MASK.ANGLE_RANGE = math.pi / 15
 _C.MASK.MIN_WIDTH = 8

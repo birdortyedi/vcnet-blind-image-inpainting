@@ -58,8 +58,14 @@ Modes:
 
 You can download pretrained models here:
 
-- [FFHQ-CelebAMaskHQ-ImageNet](https://www.dropbox.com/s/e2f0dsoxqe693z0/VCNet_FFHQ_200000step_4bs_0.0002lr_1gpu_16run.pth?dl=0) 
-- [Places-ImageNet](https://www.dropbox.com/s/f03iblb3epayt6c/VCNet_Places_300000step_4bs_0.0002lr_1gpu_17run.pth?dl=0)
+- [FFHQ-CelebAMaskHQ-ImageNet]
+  <!--
+  (https://www.dropbox.com/s/e2f0dsoxqe693z0/VCNet_FFHQ_200000step_4bs_0.0002lr_1gpu_16run.pth?dl=0)
+  -->
+- [Places-ImageNet]
+  <!--
+  (https://www.dropbox.com/s/f03iblb3epayt6c/VCNet_Places_300000step_4bs_0.0002lr_1gpu_17run.pth?dl=0)
+  -->
 
 ## Qualitative Results
 
@@ -114,7 +120,7 @@ From Places-ImageNet model
 
 ## Contacts
 
-Please feel free to open an issue or to send an e-mail to ```furkan.kinli@ozyegin.edu.tr```
+<!--Please feel free to open an issue or to send an e-mail to ```furkan.kinli@ozyegin.edu.tr```-->
 
 [ffhq-celeba-1]: outputs/ffhq-celeba/examples_175544.png
 [ffhq-celeba-2]: outputs/ffhq-celeba/examples_176544.png

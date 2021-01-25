@@ -3,6 +3,7 @@ import random
 import string
 
 from torch.autograd import Variable
+from torch.utils import data
 
 
 class UnNormalize(object):
@@ -60,3 +61,57 @@ def linear_scaling(x):
 
 def linear_unscaling(x):
     return (x + 1.) * 127.5 / 255.
+
+
+import os
+from PIL import Image
+from torchvision import transforms
+from utils.config import get_cfg_defaults
+
+
+class RaindropDataset(data.Dataset):
+    def __init__(self, root, transform=None, target_transform=None):
+        self.data_path = os.path.join(root, "data")
+        self.gt_path = os.path.join(root, "gt")
+
+        self.data = self._make_dataset(self.data_path)
+        self.gt = self._make_dataset(self.gt_path)
+        self.transform = transform
+        self.target_transform = target_transform
+
+    def __getitem__(self, index):
+        img = self._read_img(self.data[index])
+        y = self._read_img(self.gt[index])
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            y = self.target_transform(y)
+
+        return img, y
+
+    def __len__(self):
+        return len(self.data)
+
+    def _make_dataset(self, target_dir):
+        instances = list()
+        for root, _, fnames in sorted(os.walk(target_dir, followlinks=True)):
+            for fname in sorted(fnames):
+                path = os.path.join(root, fname)
+                instances.append(path)
+        return instances
+
+    def _read_img(self, im_path):
+        return Image.open(im_path).convert("RGB")
+
+
+if __name__ == '__main__':
+    cfg = get_cfg_defaults()
+    transform = transforms.Compose([transforms.Resize(cfg.DATASET.SIZE),
+                                    transforms.CenterCrop(cfg.DATASET.SIZE),
+                                     transforms.ToTensor()
+                                     ])
+    dataset = RaindropDataset("../datasets/raindrop/train20/train", transform=transform, target_transform=transform)
+    img, y = dataset.__getitem__(3)
+    print(img.size(), y.size())
